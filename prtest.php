@@ -7,6 +7,7 @@
 <style>
 /* ------------------ Table Styles ------------------ */
 
+
 table {
   border: 0;
   border-spacing: 0;
@@ -62,6 +63,16 @@ table ul.links {
 table ul.links li {
   padding: 0 1em 0 0;
 }
+
+body { visibility: hidden } 
+div.profiler {
+	visibility: visible; 
+	position: absolute; 
+	top:1; 
+	left:1; 
+} 
+
+
 </style>
 
 
@@ -94,8 +105,8 @@ $last_function = "";
 $last_stack_size=0;
 $level = 0; 
 $count = 0; 
-$func_aggregate_threshold=0.0; 
-$wait_threshold=0.0; 
+$threshold_trace=0.01; 
+$threshold_profile=0.01; 
 $output_line_limit=9999; // 
 $trace = 1 ; // require 0/1
 
@@ -104,19 +115,31 @@ $trace = 1 ; // require 0/1
  */
 
 
-func_serial() ; 
+/**
+ * Root directory of Drupal installation.
+ */
+
+//################################################################
+define('DRUPAL_ROOT', getcwd());
+require_once DRUPAL_ROOT . '/includes/bootstrap.inc';
+drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
+menu_execute_active_handler();
+//################################################################
+
 
 show_profile();
 
+return ; 
+
+#### TESTING 
+func_serial() ; 
+show_profile();
 // reset 
 $profile = []; 
-
 print "BEFORE ONE()\n"; 
 func_one(); 
 print "AFTER ONE()\n"; 
-
 show_profile();
-
 return ; 
 
 
@@ -124,7 +147,7 @@ function do_profile() {
 
 	// This function is triggered by all function calls. 
 	// Stack trace of 0 is 'this', 1 is the function that has just been popped off the stack ...
-    global $profile,$last_time,$level,$count,$wait_threshold,$output_line_limit,$trace,$last_function
+    global $profile,$last_time,$level,$count,$threshold_trace,$output_line_limit,$trace,$last_function
 	,$last_stack_size;
 
 	// save the stack array 
@@ -176,7 +199,7 @@ $stack_size=count($bt);
 		if (isset($profile[$caller['function']]['name'])) {
    			$profile[$caller['function']]['wait'] +=$wait_time;
 		}else{
-			if ($caller['function'] != 'do_profile' ) { 
+			if ($caller['function'] != 'do_profile' && isset($debug) ) { 
 				print "\nWARNING: function not found:" ; 
 				print  $caller['function'] ;  
 			} 
@@ -190,22 +213,28 @@ $stack_size=count($bt);
 		// check line limit ?
 		if ($count < $output_line_limit ) { 
 
-		// check that function changes ?
-		print "<!--"; 
-		print " $count "; 
-		print " $last_time "; 
-		print  $frame['line'] ; 
-		print " " ; 
-		print  $frame['file'] ; 
-		print " $function ";  
-		print " $last_function ";  
-		print " $stack_size "; 
-		print " $last_stack_size "; 
-		print  $profile[$caller['function']]['time'] ; 
-		print " " ; 
-		print  $profile[$caller['function']]['wait'] ; 
-		print "-->\n"; 
+			if ($count==1) { 
+				print "<!--count last_time line file function last_function stack_size last_stack_size time wait -->\n" ; 
 
+			} 
+
+			if($wait_time > $threshold_trace) { 
+			// check that function changes ?
+				print "<!--"; 
+				print " $count "; 
+				print " $last_time "; 
+				print  $frame['line'] ; 
+				print " " ; 
+				print  $frame['file'] ; 
+				print " $function ";  
+				print " $last_function ";  
+				print " $stack_size "; 
+				print " $last_stack_size "; 
+				print  $profile[$caller['function']]['time'] ; 
+				print " " ; 
+				print  $profile[$caller['function']]['wait'] ; 
+				print "-->\n"; 
+			} 
 		}
 	} 
 
@@ -225,10 +254,12 @@ function show_profile() {
 
 	// print out report of aggregated stack info and timming 
 
-    global $profile,$count,$func_aggregate_threshold;
+    global $profile,$count,$threshold_profile;
 
 	$fcount=0; 
 	$prcount=0;
+
+	echo "<div class='profiler'>"; 
 
 	echo '<h2>Slow Function Report</h2><table>' ; 
 
@@ -238,7 +269,7 @@ function show_profile() {
 
 		$fcount++; 
 
-		if ( $f['time'] > $func_aggregate_threshold ) { 
+		if ( $f['time'] > $threshold_profile ) { 
 
 			$prcount++; 
 			print "<tr><td>$prcount<td>$fcount"; 
@@ -254,10 +285,11 @@ function show_profile() {
 		} 
 	} 
 
-	echo "Number of unique functions executed :$count<br>"; 
-	echo "Number of execs :$fcount<br>"; 
-	echo "Number of functions with accumlated > 0.5 seconds :$prcount<br>"; 
+	echo "Number of unique functions executed :$fcount<br>"; 
+	echo "Number of execs :$count<br>"; 
+	echo "Number of functions with accumlated > $threshold_profile millmilliiseconds :$prcount<br>"; 
 
+	echo '</div>'; 
 }
 
 
