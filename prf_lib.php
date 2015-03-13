@@ -7,20 +7,25 @@ date_default_timezone_set('UTC');
 $profile = array(); // main array to collect data for each function 
 $last_time = microtime(true); // starting time 
 $count = 0;
-$threshold_trace=0.1;
-$threshold_profile=0.01;
+$threshold_trace=0;
+$threshold_profile=0;
 $output_line_limit=999; // to limit log gi
 $trace = 1 ; // require 0/1
 $debug =1 ;
 $last_function = "";
 $last_stack_size=0;
 
+$partial=1; 
+$partial_pattern='two'; 
+
 ### TESTING
 
 function start_profile() { 
 		declare(ticks=1);
 		register_tick_function('do_profile');
+		return true ; 
 }
+
 
 /* 
    print "BEFORE SERIAL()\n";
@@ -39,7 +44,6 @@ show_profile();
  */
 
 
-
 function do_profile() {
 
 		// This function is triggered by all function calls.
@@ -47,19 +51,27 @@ function do_profile() {
 
 		global $profile, $last_time, $count, 
 			   $threshold_trace, $output_line_limit, $last_function,
-			   $last_stack_size;
+			   $last_stack_size,$partial,$partial_pattern;
 
-		$debug = 1;
+		//-------------------------------------------------------------------------
+		// init params 
+
+		$debug = 0;
 		$pid = getmypid();
 		$log_file = "/tmp/prtest_log_" . $pid . ".html";
 		$trace = 1;
 
+		//-------------------------------------------------------------------------
 		// save the stack array
+
 		$bt = debug_backtrace();
 
 		if (count($bt) < 1) {
 				return ;
 		}
+
+		//-------------------------------------------------------------------------
+		// check that we have something to work on ...
 
 		$stack_size=count($bt);
 		$stack_pos = 0 ;
@@ -73,18 +85,70 @@ function do_profile() {
 				} 
 		}while($function == 'do_profile');
 
-
 		// check if $function is set ...
 		if($function == 'do_profile'){
 				return ;
 		}
 
 
+		//-------------------------------------------------------------------------
+
+		// setting time must be placed properly 
 		$wait_time = (microtime(true) - $last_time);
-
-
 		// maybe only count of function name changes ?
 		$count++;
+
+
+
+		//-------------------------------------------------------------------------
+		// return unless we find specific pattern in stack function or file ...
+
+		if ($partial>0) { 
+		$found = 0 ; 
+		foreach($bt as $k => $slice) { 
+			# rule 1 - only trace if pattern is found 
+			if($debug > 0 ) {  
+				echo $slice['function'] . "->"; 
+			} 
+			if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
+				$found++; 
+			} 
+		} 
+		if($debug){echo "<br>\n";} 
+			// check results 
+			if($found < 1) { 
+
+				// reset time 
+				// RECORD DEFAULT 
+
+				if (isset($profile['_IGNORED_'])) {
+					$profile['_IGNORED_']['time'] +=$wait_time;
+					$profile['_IGNORED_']['wait'] +=$wait_time;
+				}else{
+					// was bypassed somehow ? need to create entry in $profile[] !		
+					$profile['_IGNORED_'] = array();
+					$profile['_IGNORED_']['name'] = '_IGNORED_' ;
+					$profile['_IGNORED_']['time'] = $wait_time;
+					$profile['_IGNORED_']['wait'] = $wait_time;
+					$profile['_IGNORED_']['count'] = 1;
+					$profile['_IGNORED_']['starts'] = -9999 ; // will SHOW UP on report ... 1;
+					$profile['_IGNORED_']['firstcount'] = $count;
+				}
+
+				$last_time = microtime(true);
+				$last_stack_size = $stack_size; 
+				$last_function = '_IGNORED_' ;
+
+				return ; 
+			}	 
+		} 
+
+
+
+		//-------------------------------------------------------------------------
+		// BEGIN 
+
+
 
 		// make new entry for function if it is new
 		if (!isset($profile[$function]['name'])) {
@@ -147,7 +211,7 @@ function do_profile() {
 				if ($count < $output_line_limit ) {
 
 						if ($count==1) {
-								$log = "<!-- count last_time line file function last_function stack_size last_stack_size time wait -->\n" ;
+								$lot = "<!-- count last_time line file function last_function stack_size last_stack_size time wait -->\n" ;
 								file_put_contents($log_file, $lot, FILE_APPEND );
 
 						}
@@ -198,7 +262,6 @@ function show_profile() {
 		echo '<h2>Slow Function Report</h2><table border=1>' ;
 
 		foreach($profile as $f) {
-
 				$fcount++;
 
 				// print headers...
@@ -215,22 +278,28 @@ function show_profile() {
 			$prcount++;
 			print "<tr><td>$prcount<td>$fcount";
 			foreach($f as $k => $v) {
-				echo "<td>$v";
+				if (is_float($v)) { 
+					$padded = number_format($v,2);
+					echo "<td>$padded";
+				} else { 
+					echo "<td>$v";
+				} 
 			}
 			// avg exec time
 			$a = $f['time'] / ($f['count']+0.1) ;
-			echo "<td>$a";
+			echo "<td>" . number_format($a,4);
 			// avg wait time
 			$a = $f['wait'] / ($f['count']+0.1) ;
-			echo "<td>$a<tr>";
+			echo "<td>" .  number_format($a,4);
 		}
 	}	
 
+$pid=getmypid(); 
 echo "</table>Number of unique functions executed :$fcount<br>";
 echo "Number of execs :$count<br>";
 echo "Number of functions with accumlated > $threshold_profile millmilliiseconds :$prcount<br>";
 echo "<hr> SHOW THE LOG <br> 
-<a href=\"showtmplog.php?PID=<?php echo getmypid()?>\" target=\"logfile\">Show Log</a>"; 
+<a href=\"prf_showtmplog.php?PID=$pid\" target=\"logfile\">Show Log</a>"; 
 echo '</div>';
 
 }
