@@ -1,4 +1,12 @@
 <?php
+/* i
+VERSION		DATE 		REASON 
+----------	---------	------------------------------
+0.001		20140312	Initial setup 
+
+
+*/
+
 
 date_default_timezone_set('UTC');
 
@@ -18,7 +26,18 @@ $last_stack_size=0;
 $partial=1; 
 $partial_pattern='two'; 
 
-### TESTING
+$trace_count=0; 
+
+
+/* 
+ *   start_profile() 
+ * 
+ * this starts the process 
+ * 2 lines can be called ... but sometimes 
+ * code needs to be executed directly, without 
+ * calling from a function 
+ * 
+ */
 
 function start_profile() { 
 		declare(ticks=1);
@@ -27,21 +46,24 @@ function start_profile() {
 }
 
 
+
+
 /* 
-   print "BEFORE SERIAL()\n";
-   func_serial() ;
-   print "AFTER SERIAL()\n";
-
-   show_profile();
-
-// reset
-
-$profile = array();
-print "BEFORE ONE()\n";
-func_one();
-print "AFTER ONE()\n";
-show_profile();
+ *   do_profile() 
+ * 
+ * do_profile is the workhorse of the Profiler and the Trace 
+ * the do_profile() function is called for every 'tick' of execution 
+ * this adds a little overhead that can be identified on the report 
+ * do_profile() should be at the top of every backtrace that it calls, and the 
+ * function that is executing should be the second entry in the backtrace array. 
+ * 
+ * a few funny things seem to happen with require/require_once, etc 
+ * and do_profile can be triggered from a stack with 3 entries, followed imediately 
+ * by a stack with 8 entries. Therefore the code needs to handle a variety of 
+ * situations  
+ * 
  */
+
 
 
 function do_profile() {
@@ -104,22 +126,27 @@ function do_profile() {
 		// return unless we find specific pattern in stack function or file ...
 
 		if ($partial>0) { 
-		$found = 0 ; 
-		foreach($bt as $k => $slice) { 
-			# rule 1 - only trace if pattern is found 
-			if($debug > 0 ) {  
-				echo $slice['function'] . "->"; 
+			$found = 0 ; 
+			foreach($bt as $k => $slice) { 
+				# rule 1 - only trace if pattern is found 
+				if($debug > 0 ) {  
+					echo $slice['function'] . "->"; 
+				} 
+				if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
+					$found++; 
+				}	 
 			} 
-			if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
-				$found++; 
+
+			if($debug){
+				echo "<br>\n";
 			} 
-		} 
-		if($debug){echo "<br>\n";} 
-			// check results 
+
+			// check results - if we are going to exit, we want to prep data before 
+			// exiting the dp_profile() function 
+ 
 			if($found < 1) { 
 
-				// reset time 
-				// RECORD DEFAULT 
+				// pre-exit routine  
 
 				if (isset($profile['_IGNORED_'])) {
 					$profile['_IGNORED_']['time'] +=$wait_time;
@@ -186,11 +213,12 @@ function do_profile() {
 				}
 
 				if ( $debug > 0 ) {
-					if( $count < $output_line_limit ) { 
+					if( $output_line_count < $output_line_limit ) { 
 						$lot = "<!-- stack: fn:$function - count:$count - stack_pos:$index - file:" ;
 						file_put_contents($log_file, $lot, FILE_APPEND );
 						$lot=$caller['file'] . " - line:" . $caller['line'] . " - function:" . $caller['function'] . " -->\n" ;
 						file_put_contents($log_file, $lot, FILE_APPEND );
+						$output_line_count++; 			
 					}
 				}
 		}
@@ -208,7 +236,7 @@ function do_profile() {
 		if($trace==1) {
 
 				// check line limit ?
-				if ($count < $output_line_limit ) {
+				if ($output_line_count < $output_line_limit ) {
 
 						if ($count==1) {
 								$lot = "<!-- count last_time line file function last_function stack_size last_stack_size time wait -->\n" ;
@@ -226,15 +254,14 @@ function do_profile() {
 								$lot = $lot . " - function: $function ";
 								$lot = $lot . " - last_function: $last_function ";
 								$lot = $lot . " - stack_size: $stack_size ";
-								$lot = $lot . " - last_start_size: $last_stack_size - time: ";
-								$lot = $lot . $profile[$caller['function']]['time'] ;
-								$lot = $lot . " - wait: " ;
-								$lot = $lot . $profile[$caller['function']]['wait'] ;
-								$lot = $lot . " - starts: " ;
-								$lot = $lot . $profile[$caller['function']]['starts'] ;
+								$lot = $lot . " - last_start_size: $last_stack_size ";
+								$lot = $lot . " - time: " . $profile[$caller['function']]['time'] ;
+								$lot = $lot . " - wait: " . $profile[$caller['function']]['wait'] ;
+								$lot = $lot . " - starts: " . $profile[$caller['function']]['starts'] ;
 								$lot = $lot . "-->\n";
 								file_put_contents($log_file, $lot, FILE_APPEND );
 						}
+						$output_line_count++; 
 				}
 		}
 
@@ -242,7 +269,7 @@ function do_profile() {
 		$last_function = $function ;
 		$last_stack_size = $stack_size ;
 
-		unset($bt);
+		//unset($bt);
 
 }
 
