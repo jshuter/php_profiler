@@ -1,9 +1,14 @@
 <?php
+
 /* i
 VERSION		DATE 		REASON 
 ----------	---------	------------------------------
 0.001		20140312	Initial setup 
 
+TOFO 
+
+-- error trapping 
+-- convert into object 
 
 */
 
@@ -19,14 +24,16 @@ $threshold_trace=0;
 $threshold_profile=0;
 $output_line_limit=999; // to limit log gi
 $trace = 1 ; // require 0/1
-$debug =1 ;
+$debug = 1 ;
 $last_function = "";
 $last_stack_size=0;
 
 $partial=1; 
-$partial_pattern='two'; 
+$partial_pattern='boot'; 
 
-$trace_count=0; 
+$output_line_count=0; 
+$last_trace_chain = ""; 
+
 
 
 /* 
@@ -71,14 +78,15 @@ function do_profile() {
 		// This function is triggered by all function calls.
 		// Stack trace of 0 is 'this', 1 is the function that has just been popped off the stack ...
 
-		global $profile, $last_time, $count, 
+		$trace_chain = ""; 
+
+		global $profile, $last_time, $count, $output_line_count, 
 			   $threshold_trace, $output_line_limit, $last_function,
-			   $last_stack_size,$partial,$partial_pattern;
+			   $last_stack_size, $partial, $partial_pattern, $debug, $last_trace_chain ;
 
 		//-------------------------------------------------------------------------
 		// init params 
 
-		$debug = 0;
 		$pid = getmypid();
 		$log_file = "/tmp/prtest_log_" . $pid . ".html";
 		$trace = 1;
@@ -125,12 +133,16 @@ function do_profile() {
 		//-------------------------------------------------------------------------
 		// return unless we find specific pattern in stack function or file ...
 
+//TODO - move this trace out of $partial check ..
+
 		if ($partial>0) { 
 			$found = 0 ; 
+
+			$trace_chain=""; 
 			foreach($bt as $k => $slice) { 
 				# rule 1 - only trace if pattern is found 
 				if($debug > 0 ) {  
-					echo $slice['function'] . "->"; 
+					 $trace_chain = $slice['function'] . "->" . $trace_chain ; 
 				} 
 				if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
 					$found++; 
@@ -138,7 +150,12 @@ function do_profile() {
 			} 
 
 			if($debug){
-				echo "<br>\n";
+				if ($trace_chain != $last_trace_chain) { 
+					print gmdate("H:i:s", time()) ; 
+					print " - " ; 
+					print $trace_chain . "\n";
+					$last_trace_chain = $trace_chain ; 
+				} 
 			} 
 
 			// check results - if we are going to exit, we want to prep data before 
