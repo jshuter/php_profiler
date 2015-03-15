@@ -20,16 +20,17 @@ date_default_timezone_set('UTC');
 $profile = array(); // main array to collect data for each function 
 $last_time = microtime(true); // starting time 
 $count = 0;
-$threshold_trace=0;
-$threshold_profile=0;
-$output_line_limit=999; // to limit log gi
+$threshold_trace=0;  // limit what is printed into trace (see exception below) 
+$function_to_track = ""; // allow one function to have ALL listed in trace 
+$threshold_profile=0.01;
+$output_line_limit=99999; // to limit log gi
 $trace = 1 ; // require 0/1
-$debug = 1 ;
+$mydebug = 1 ;
 $last_function = "";
 $last_stack_size=0;
 
-$partial=1; 
-$partial_pattern='boot'; 
+$partial=0; 
+$partial_pattern=''; 
 
 $output_line_count=0; 
 $last_trace_chain = ""; 
@@ -79,20 +80,21 @@ function do_profile() {
 		// Stack trace of 0 is 'this', 1 is the function that has just been popped off the stack ...
 
 		$trace_chain = ""; 
+		$threshold_trace_override = 0; 
 
 		global $profile, $last_time, $count, $output_line_count, 
-			   $threshold_trace, $output_line_limit, $last_function,
-			   $last_stack_size, $partial, $partial_pattern, $debug, $last_trace_chain ;
+			   $threshold_trace, $output_line_limit, $last_function, $function_to_track,
+			   $last_stack_size, $partial, $partial_pattern, $mydebug, $last_trace_chain, $trace ;
 
+		
 		//-------------------------------------------------------------------------
-		// init params 
+		// get log file name  
 
 		$pid = getmypid();
 		$log_file = "/tmp/prtest_log_" . $pid . ".html";
-		$trace = 1;
 
 		//-------------------------------------------------------------------------
-		// save the stack array
+		// save the backtrace stack for analysis ... 
 
 		$bt = debug_backtrace();
 
@@ -106,92 +108,105 @@ function do_profile() {
 		$stack_size=count($bt);
 		$stack_pos = 0 ;
 
-		do {
-				$frame = $bt[$stack_pos];
-				$function = $frame['function'];
-				$stack_pos++;
-				if($stack_pos>=$stack_size){
-						break;
-				} 
+		do {	
+			// we assume that [0] contains THIS do_profile ... 
+			$frame = $bt[$stack_pos];
+			$function = $frame['function'];
+			$stack_pos++;
+			if($stack_pos>=$stack_size){
+				break;
+			} 
 		}while($function == 'do_profile');
 
 		// check if $function is set ...
 		if($function == 'do_profile'){
-				return ;
+			return ;
 		}
 
-
+		// lets also make a quick exit if we are in the showshow_profile() function 
+		if($function == 'show_profile'){
+		 	// no need to fix $last_time, etc if show_profile() is the last thing that is running 
+			// but ... could use some adjustment if this is not the case 	
+			return ;
+		}
+		
+		
 		//-------------------------------------------------------------------------
 
 		// setting time must be placed properly 
 		$wait_time = (microtime(true) - $last_time);
 		// maybe only count of function name changes ?
-		$count++;
 
+		// can also track overhead here if wanted - ie, time used by do_profile 
+
+		$count++;
 
 
 		//-------------------------------------------------------------------------
 		// return unless we find specific pattern in stack function or file ...
 
-//TODO - move this trace out of $partial check ..
+		$found = 0 ; 
 
-		if ($partial>0) { 
-			$found = 0 ; 
-
-			$trace_chain=""; 
-			foreach($bt as $k => $slice) { 
-				# rule 1 - only trace if pattern is found 
-				if($debug > 0 ) {  
-					 $trace_chain = $slice['function'] . "->" . $trace_chain ; 
-				} 
-				if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
-					$found++; 
-				}	 
-			} 
-
-			if($debug){
-				if ($trace_chain != $last_trace_chain) { 
-					print gmdate("H:i:s", time()) ; 
-					print " - " ; 
-					print $trace_chain . "\n";
-					$last_trace_chain = $trace_chain ; 
-				} 
-			} 
-
-			// check results - if we are going to exit, we want to prep data before 
-			// exiting the dp_profile() function 
- 
-			if($found < 1) { 
-
-				// pre-exit routine  
-
-				if (isset($profile['_IGNORED_'])) {
-					$profile['_IGNORED_']['time'] +=$wait_time;
-					$profile['_IGNORED_']['wait'] +=$wait_time;
-				}else{
-					// was bypassed somehow ? need to create entry in $profile[] !		
-					$profile['_IGNORED_'] = array();
-					$profile['_IGNORED_']['name'] = '_IGNORED_' ;
-					$profile['_IGNORED_']['time'] = $wait_time;
-					$profile['_IGNORED_']['wait'] = $wait_time;
-					$profile['_IGNORED_']['count'] = 1;
-					$profile['_IGNORED_']['starts'] = -9999 ; // will SHOW UP on report ... 1;
-					$profile['_IGNORED_']['firstcount'] = $count;
+		// build line log with call stack    fn1()->fn2()->fn3()->...
+		$trace_chain=""; 
+		$X=0; 
+		foreach($bt as $k => $slice) { 
+			$x++; 
+			// trace all - even if partial - but drop THIS do_profile from the end of the chain 
+			if($x!=1 || $slice['function'] != 'do_profile') {  
+				$trace_chain = $slice['function'] . "->" . $trace_chain ; 
+				if($partial > 0) { 
+					if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
+						$found++; 
+					}	 
 				}
+			}
+		}
 
-				$last_time = microtime(true);
-				$last_stack_size = $stack_size; 
-				$last_function = '_IGNORED_' ;
 
-				return ; 
-			}	 
+		// write chain log to file 
+	
+		if ($trace_chain != $last_trace_chain) { 
+			$lot = "-- chain:" . gmdate("H:i:s", time()) ; 
+			file_put_contents($log_file, $lot, FILE_APPEND );
+			file_put_contents($log_file, " - ", FILE_APPEND );
+			$lot = $trace_chain . "\n";
+			file_put_contents($log_file, $lot, FILE_APPEND );
+			$last_trace_chain = $trace_chain ; 
 		} 
+
+		// check results - if we are going to exit, we want to prep data before 
+		// exiting the dp_profile() function 
+
+		if (($partial>0) && ($found < 1)) { 
+
+			// pre-exit routine  
+
+			if (isset($profile['_IGNORED_'])) {
+				$profile['_IGNORED_']['time'] +=$wait_time;
+				$profile['_IGNORED_']['wait'] +=$wait_time;
+			}else{
+				// was bypassed somehow ? need to create entry in $profile[] !		
+				$profile['_IGNORED_'] = array();
+				$profile['_IGNORED_']['name'] = '_IGNORED_' ;
+				$profile['_IGNORED_']['time'] = $wait_time;
+				$profile['_IGNORED_']['wait'] = $wait_time;
+				$profile['_IGNORED_']['count'] = 1;
+				$profile['_IGNORED_']['starts'] = -9999 ; // will SHOW UP on report ... 1;
+				$profile['_IGNORED_']['firstcount'] = $count;
+			}
+
+			$last_time = microtime(true);
+			$last_stack_size = $stack_size; 
+			$last_function = '_IGNORED_' ;
+
+			return ; 
+		}	 
 
 
 
 		//-------------------------------------------------------------------------
 		// BEGIN 
-
 
 
 		// make new entry for function if it is new
@@ -216,30 +231,34 @@ function do_profile() {
 
 				$fn = $caller['function'];
 
-				if (isset($profile[$fn]['name'])) {
-						$profile[$caller['function']]['wait'] +=$wait_time;
-				}else{
-						// was bypassed somehow ? need to create entry in $profile[] !		
-						$profile[$fn] = array();
-						$profile[$fn]['name'] = $fn ;
-						$profile[$fn]['time'] = 0;
-						$profile[$fn]['wait'] = $wait_time;
-						$profile[$fn]['count'] = 1;
-						$profile[$fn]['starts'] = -9999 ; // will SHOW UP on report ... 1;
-						$profile[$fn]['firstcount'] = $count;
+				// don't count time on function on BOTH exec & wait 
+				if ($fn != $function) { 
+
+					if (isset($profile[$fn]['name'])) {
+							$profile[$caller['function']]['wait'] +=$wait_time;
+					}else{
+							// was bypassed somehow ? need to create entry in $profile[] !		
+							$profile[$fn] = array();
+							$profile[$fn]['name'] = $fn ;
+							$profile[$fn]['time'] = 0;
+							$profile[$fn]['wait'] = $wait_time;
+							$profile[$fn]['count'] = 1;
+							$profile[$fn]['starts'] = -9999 ; // will SHOW UP on report ... 1;
+							$profile[$fn]['firstcount'] = $count;
+					}
 				}
 
-				if ( $debug > 0 ) {
-					if( $output_line_count < $output_line_limit ) { 
-						$lot = "<!-- stack: fn:$function - count:$count - stack_pos:$index - file:" ;
-						file_put_contents($log_file, $lot, FILE_APPEND );
-						$lot=$caller['file'] . " - line:" . $caller['line'] . " - function:" . $caller['function'] . " -->\n" ;
-						file_put_contents($log_file, $lot, FILE_APPEND );
-						$output_line_count++; 			
-					}
+
+				if( $output_line_count < $output_line_limit ) { 
+					$lot = "-- stack: fn:$function - count:$count - stack_pos:$index - file:" ;
+					file_put_contents($log_file, $lot, FILE_APPEND );
+					$lot=$caller['file'] . " - line:" . $caller['line'] . " - function:" . $caller['function'] . " --\n" ;
+					file_put_contents($log_file, $lot, FILE_APPEND );
+					$output_line_count++; 			
 				}
 		}
 
+//TODO - review logic ... 
 
 		// assume [0] is profiler .... [1] real FUNCTION ...  
 		if($stack_size > $last_stack_size) { 
@@ -250,32 +269,27 @@ function do_profile() {
 
 
 		// trace all - all lines ?
-		if($trace==1) {
+		if($trace > 0) {
 
 				// check line limit ?
 				if ($output_line_count < $output_line_limit ) {
 
-						if ($count==1) {
-								$lot = "<!-- count last_time line file function last_function stack_size last_stack_size time wait -->\n" ;
-								file_put_contents($log_file, $lot, FILE_APPEND );
-
-						}
-
-						if($wait_time > $threshold_trace) {
+						if(($wait_time >= $threshold_trace) || ($threshold_trace_override>0)) {
 								// check that function changes ?
-								$lot = "<!-- trace : ";
+								$lot = "-- trace:" . gmdate("H:i:s", time()) ;
 								$lot = $lot . " count: $count ";
-								$lot = $lot . " - last_time: $last_time ";
+								$lot = $lot . " - wait_time: " . number_format($wait_time,4);
+							//	$lot = $lot . " - last_time: " . gmdate("H:i:s",$last_time);
 								$lot = $lot . " - line: " . $frame['line'] ;
 								$lot = $lot . " - file: " . $frame['file'] ;
 								$lot = $lot . " - function: $function ";
-								$lot = $lot . " - last_function: $last_function ";
+								$lot = $lot . " - prior_function: $last_function ";
 								$lot = $lot . " - stack_size: $stack_size ";
 								$lot = $lot . " - last_start_size: $last_stack_size ";
-								$lot = $lot . " - time: " . $profile[$caller['function']]['time'] ;
-								$lot = $lot . " - wait: " . $profile[$caller['function']]['wait'] ;
+								$lot = $lot . " - time: " . number_format($profile[$caller['function']]['time'],4) ;
+								$lot = $lot . " - wait: " . number_format($profile[$caller['function']]['wait'],4) ;
 								$lot = $lot . " - starts: " . $profile[$caller['function']]['starts'] ;
-								$lot = $lot . "-->\n";
+								$lot = $lot . "--\n";
 								file_put_contents($log_file, $lot, FILE_APPEND );
 						}
 						$output_line_count++; 
@@ -302,6 +316,7 @@ function show_profile() {
 		$fcount=0;
 		$prcount=0;
 
+		echo html_styles(); 
 		echo "<div class='profiler'>";
 		echo '<h2>Slow Function Report</h2><table border=1>' ;
 
@@ -318,7 +333,7 @@ function show_profile() {
 				}
 
 				// print the data 
-		if ( $f['time'] > $threshold_profile ) {
+		if ( $f['time'] >= $threshold_profile || $f['wait'] >= $threshold_profile) {
 			$prcount++;
 			print "<tr><td>$prcount<td>$fcount";
 			foreach($f as $k => $v) {
@@ -343,9 +358,41 @@ echo "</table>Number of unique functions executed :$fcount<br>";
 echo "Number of execs :$count<br>";
 echo "Number of functions with accumlated > $threshold_profile millmilliiseconds :$prcount<br>";
 echo "<hr> SHOW THE LOG <br> 
-<a href=\"prf_showtmplog.php?PID=$pid\" target=\"logfile\">Show Log</a>"; 
+<a href=\"/prf_showtmplog.php?PID=$pid\" target=\"logfile\">Show Log - ALL</a> |  
+<a href=\"/prf_showtmplog.php?GREP=chain&PID=$pid\" target=\"logfile\">Show Log -- chain</a> | 
+<a href=\"/prf_showtmplog.php?GREP=trace&PID=$pid\" target=\"logfile\">Show Log -- trace</a> | 
+<a href=\"/prf_showtmplog.php?GREP=stack&PID=$pid\" target=\"logfile\">Show Log -- stack</a>"; 
 echo '</div>';
 
 }
 
+function html_styles() { 
 
+print '
+<style>
+/* ------------------ Table Styles ------------------ */
+table { border: 0; border-spacing: 0; font-size: 0.857em; margin: 10px 0; width: 100%; background-color: #ddd}
+table table { font-size: 1em; }
+#footer-wrapper table { font-size: 1em; }
+table tr th { background: #FFFFFF; border-bottom-style: none; }
+table tr th,
+table tr th a,
+table tr th a:hover { color: #FFF; font-weight: bold; }
+table tbody tr th { vertical-align: top; }
+tr td,
+tr th { padding: 4px 9px; border: 1px solid #fff; text-align: left; /* LTR */ }
+#footer-wrapper tr td,
+#footer-wrapper tr th { border-color: #555; border-color: rgba(255, 255, 255, 0.18); }
+tr.odd { background: #e4e4e4; background: rgba(0, 0, 0, 0.105); }
+tr,
+tr.even { background: #efefef; background: rgba(0, 0, 0, 0.063); }
+table ul.links { margin: 0; padding: 0; font-size: 1em; }
+table ul.links li { padding: 0 1em 0 0; }
+
+#body { visibility: hidden }
+#div.profiler { visibility: visible; position: absolute; top:1; left:1; }
+
+</style>
+'; 
+
+} 

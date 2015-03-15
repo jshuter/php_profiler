@@ -77,21 +77,18 @@ div.profiler {
 <?php
 
 require 'prf_lib.php'; 
-
-#start_profile() ; 
- declare(ticks=1);
- register_tick_function('do_profile');
+declare(ticks=1);
+register_tick_function('do_profile');
 
 
 #-------------------------------------------
 # test 1 
 #-------------------------------------------
 
-print "BEFORE SERIAL()\n";
+// microsecond delay 
+$t=1000000;
 
 func_serial() ;
-
-print "AFTER SERIAL()\n";
 
 show_profile();
 
@@ -102,47 +99,49 @@ show_profile();
 
 $profile = array();
 
-print "BEFORE ONE()\n";
-
 func_one();
-
-print "AFTER ONE()\n";
-
-#-------------------------------------------
 
 show_profile(); 
 
 
 
+
+#----------------------------------------
+
 function func_one() {
-print "1"; 
-sleep(1);
-$x=1; $y=3; $x=$x+$y;
-print "2"; 
+global $t;
+print "$t";
+usleep($t);
 func_two();
-print "3"; 
+usleep($t);
 }
 
 function func_two() {
-sleep(1);
-$x=1; $y=3; $x=$x+$y;
+global $t;
+print "$t";
+usleep($t);
+usleep($t);
 func_three();
+usleep($t);
 }
 
 function func_three() {
-sleep(1);
-$x=1; $y=3; $x=$x+$y;
+global $t;
+print "$t";
+usleep($t);
+usleep($t);
 }
 
 function func_serial() {
-usleep(1);
-$x=1; $y=3; $x=$x+$y;
+global $t;
+print "$t";
+usleep($t);
+usleep($t);
 func_one();
-$x=1; $y=3; $x=$x+$y;
+usleep($t);
 func_two();
-$x=1; $y=3; $x=$x+$y;
+usleep($t);
 func_three();
-$x=1; $y=3; $x=$x+$y;
 }
 
 
