@@ -4,7 +4,8 @@
 VERSION		DATE 		REASON 
 ----------	---------	------------------------------
 0.001		20140312	Initial setup 
-
+0.002		20140315	record overhead 
+						ignore variable_get(); 
 TOFO 
 
 -- error trapping 
@@ -21,13 +22,14 @@ $profile = array(); // main array to collect data for each function
 $last_time = microtime(true); // starting time 
 $count = 0;
 $threshold_trace=0;  // limit what is printed into trace (see exception below) 
-$function_to_track = ""; // allow one function to have ALL listed in trace 
 $threshold_profile=0.01;
-$output_line_limit=99999; // to limit log gi
+$output_line_limit=1999; // to limit log gi
 $trace = 1 ; // require 0/1
 $mydebug = 1 ;
 $last_function = "";
 $last_stack_size=0;
+
+$profiler_start_time=time(); 
 
 $partial=0; 
 $partial_pattern=''; 
@@ -83,7 +85,7 @@ function do_profile() {
 		$threshold_trace_override = 0; 
 
 		global $profile, $last_time, $count, $output_line_count, 
-			   $threshold_trace, $output_line_limit, $last_function, $function_to_track,
+			   $threshold_trace, $output_line_limit, $last_function,
 			   $last_stack_size, $partial, $partial_pattern, $mydebug, $last_trace_chain, $trace ;
 
 		
@@ -116,12 +118,14 @@ function do_profile() {
 			if($stack_pos>=$stack_size){
 				break;
 			} 
-		}while($function == 'do_profile');
+		// added special IGNORE of variable_get() because it gets times that it should not ??
+		}while($function == 'do_profile' || $function == 'variable_get');
 
 		// check if $function is set ...
 		if($function == 'do_profile'){
 			return ;
 		}
+
 
 		// lets also make a quick exit if we are in the showshow_profile() function 
 		if($function == 'show_profile'){
@@ -135,11 +139,12 @@ function do_profile() {
 
 		// setting time must be placed properly 
 		$wait_time = (microtime(true) - $last_time);
-		// maybe only count of function name changes ?
 
 		// can also track overhead here if wanted - ie, time used by do_profile 
+		$overhead_start = microtime(true);
 
 		$count++;
+		// maybe only count of function name changes ?
 
 
 		//-------------------------------------------------------------------------
@@ -149,7 +154,7 @@ function do_profile() {
 
 		// build line log with call stack    fn1()->fn2()->fn3()->...
 		$trace_chain=""; 
-		$X=0; 
+		$x=0; 
 		foreach($bt as $k => $slice) { 
 			$x++; 
 			// trace all - even if partial - but drop THIS do_profile from the end of the chain 
@@ -223,19 +228,42 @@ function do_profile() {
 		}
 
 		// exec time ...
-		$profile[$function]['time'] += $wait_time;
+
+//		$profile[$function]['time'] += $wait_time;
+// TODO - review - time for THIS FUNCTION - OR - LAT_FUNCTION ??
+
+		// EXPERIMENT- put time into prior function ?
+		if(isset($function)){ 
+			$profile[$function]['time'] += $wait_time;
+		}
 
 
 		// everything on the stack is waiting ...
+
+
+		$function_dupcheck = array(); 
+
 		foreach($bt as $index => $caller) {
 
 				$fn = $caller['function'];
 
 				// don't count time on function on BOTH exec & wait 
-				if ($fn != $function) { 
+// TODO - review
+// TODO - review - time for THIS FUNCTION - OR - LAT_FUNCTION ??
+// EXPERIMENT- put time into prior function ?
+
+				if ( ($fn != $function) && (!isset($function_dupcheck[$fn])) )  { 
+
+					// track stats for all the other items on the stack 
+					// NOTE that functions can be included more than once on stack, and we must avoid 
+					// double counting the wait stats !
+
+					$function_dupcheck[$fn] = 1; 
 
 					if (isset($profile[$fn]['name'])) {
 							$profile[$caller['function']]['wait'] +=$wait_time;
+// TODO - split into wait count & exec count 
+							$profile[$caller['function']]['count']++;
 					}else{
 							// was bypassed somehow ? need to create entry in $profile[] !		
 							$profile[$fn] = array();
@@ -300,6 +328,9 @@ function do_profile() {
 		$last_function = $function ;
 		$last_stack_size = $stack_size ;
 
+		// record overhead 
+		$profile['do_profile']['time'] += (microtime(true) - $overhead_start);  
+
 		//unset($bt);
 
 }
@@ -332,10 +363,17 @@ function show_profile() {
 						echo "<td>avg exec<td>avg wait</tr>"; 
 				}
 
-				// print the data 
-		if ( $f['time'] >= $threshold_profile || $f['wait'] >= $threshold_profile) {
+		// print the data 
+		//if ( $f['time'] >= $threshold_profile || $f['wait'] >= $threshold_profile) {
+		if ( $f['time'] >= $threshold_profile ) {
+
+			if ($f['time'] > 0.1) { $class=" class=hot" ; 
+			}elseif($f['time'] > 0.01) { $class=" class=warm" ; 
+			}elseif($f['time'] > 0) { $class=" class=lukewarm" ; 
+			}else{ $class="";}
+
 			$prcount++;
-			print "<tr><td>$prcount<td>$fcount";
+			print "<tr$class><td>$prcount<td>$fcount";
 			foreach($f as $k => $v) {
 				if (is_float($v)) { 
 					$padded = number_format($v,2);
@@ -345,10 +383,10 @@ function show_profile() {
 				} 
 			}
 			// avg exec time
-			$a = $f['time'] / ($f['count']+0.1) ;
+			$a = $f['time'] / ($f['count']) ;
 			echo "<td>" . number_format($a,4);
 			// avg wait time
-			$a = $f['wait'] / ($f['count']+0.1) ;
+			$a = $f['wait'] / ($f['count']) ;
 			echo "<td>" .  number_format($a,4);
 		}
 	}	
@@ -357,11 +395,14 @@ $pid=getmypid();
 echo "</table>Number of unique functions executed :$fcount<br>";
 echo "Number of execs :$count<br>";
 echo "Number of functions with accumlated > $threshold_profile millmilliiseconds :$prcount<br>";
+echo "Start time :" . gmdate("H:m:s",$profiler_start_time) ; 
+echo " - End time :" . gmdate("H:m:s",time())  ; 
+echo "<br>Elapsed time (s):" . number_format((microtime() - $profiler_start_time), 4) ; 
 echo "<hr> SHOW THE LOG <br> 
 <a href=\"/prf_showtmplog.php?PID=$pid\" target=\"logfile\">Show Log - ALL</a> |  
-<a href=\"/prf_showtmplog.php?GREP=chain&PID=$pid\" target=\"logfile\">Show Log -- chain</a> | 
-<a href=\"/prf_showtmplog.php?GREP=trace&PID=$pid\" target=\"logfile\">Show Log -- trace</a> | 
-<a href=\"/prf_showtmplog.php?GREP=stack&PID=$pid\" target=\"logfile\">Show Log -- stack</a>"; 
+<a href=\"/prf_showtmplog.php?GREP=chain&PID=$pid\" target=\"chainlog\">Show Log -- chain</a> | 
+<a href=\"/prf_showtmplog.php?GREP=trace&PID=$pid\" target=\"tracelog\">Show Log -- trace</a> | 
+<a href=\"/prf_showtmplog.php?GREP=stack&PID=$pid\" target=\"stacklog\">Show Log -- stack</a>"; 
 echo '</div>';
 
 }
@@ -379,6 +420,9 @@ table tr th,
 table tr th a,
 table tr th a:hover { color: #FFF; font-weight: bold; }
 table tbody tr th { vertical-align: top; }
+tr.hot td { background: #eeaaaa ; color: #000000; } 
+tr.warm td { background: #f8cc9c; color: #000000; } 
+tr.lukewarm td { background: #f6fa94; #color: #000000; } 
 tr td,
 tr th { padding: 4px 9px; border: 1px solid #fff; text-align: left; /* LTR */ }
 #footer-wrapper tr td,

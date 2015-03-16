@@ -44,7 +44,19 @@ if (isset($_GET['LIMIT'])) {
 if (isset($_GET['PID'])) { 
 
 
-	if(isset($_GET['GREP'])) { 
+	if(isset($_GET['GREPXACT'])) { 
+
+		$pattern=$_GET['GREPXACT'];
+		$in = fopen("/tmp/prtest_log_" . $_GET['PID'] . ".html" , 'rb'); 
+		while($line = fgets($in)) {
+			if (strstr("$line", $pattern)) { 
+				echo "$lnum - " ; 
+    	     	echo($line);
+				$lnum++; 
+			}
+		}	
+
+ }	elseif(isset($_GET['GREP'])) { 
 
 		// expecting trace,stack, or chain ...
 		// extract specific line 
