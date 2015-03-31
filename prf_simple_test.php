@@ -88,10 +88,13 @@ register_tick_function('do_profile');
 // microsecond delay 
 $t=1000000;
 
-func_serial() ;
-
+func_serial1() ;
 show_profile();
 
+
+$profile = array();
+func_serial2() ;
+show_profile();
 
 #-------------------------------------------
 # reset and start test 2 
@@ -110,32 +113,37 @@ show_profile();
 
 function func_one() {
 global $t;
-print "$t";
+print " 1 * $t ";
 usleep($t);
 func_two();
-usleep($t);
 }
 
 function func_two() {
 global $t;
-print "$t";
+print " 2 * $t ";
 usleep($t);
 usleep($t);
 func_three();
-usleep($t);
 }
 
 function func_three() {
 global $t;
-print "$t";
+print " 3 * $t ";
+usleep($t);
 usleep($t);
 usleep($t);
 }
 
-function func_serial() {
+function func_serial1() {
+global $t;
+func_one();
+func_two();
+func_three();
+}
+
+function func_serial2() {
 global $t;
 print "$t";
-usleep($t);
 usleep($t);
 func_one();
 usleep($t);
@@ -143,7 +151,6 @@ func_two();
 usleep($t);
 func_three();
 }
-
 
 ?>
 
