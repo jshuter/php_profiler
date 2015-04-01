@@ -18,16 +18,21 @@ TODO : order by date for easier merges
 	: move log function for easier change of location if needed
 */
 
-
 # needed for display of data captured in logs ...
 # remove ???
 
 require '../kint/Kint.class.php';
 
-print '<html><body><a href="prf_showtmplog.php">myscouts profiler version 0.1</a><hr>'; 
+$profiler_on = ''; 
+$profiler_show = ''; 
+$profiler_dumpvars = ''; 
+
+init_params() ; 
+
 ?>
-settings:
-<form action= "prf_showtmplog.php" method='POST'>
+
+<html><body><a href="prf_showtmplog.php">myscouts profiler version 0.1</a><hr>
+settings: <form action= "prf_showtmplog.php" method='POST'>
 Turn Profiler On?
 <select name="profiler_on">
 <option<?php selection('profiler_on',"$profiler_on",'yes') ?>>yes</option>
@@ -45,17 +50,13 @@ Save Variables?
 </select>
 <input type='submit'>
 </form>
+<div>
 <pre>
 <?php
-
-
-
-
-
-
-
-
-
+function init_params() { 
+global $profiler_on; 
+global $profiler_show; 
+global $profiler_dumpvars; 
 //---- duplicated in index.php ... 
 if (isset($_POST['profiler_on'])) {
     $cval=$_POST['profiler_on'];
@@ -110,28 +111,34 @@ $profiler_on=(isset($_COOKIE['PROFILER_ON'])&&($_COOKIE['PROFILER_ON']=='yes')) 
 $profiler_show=(isset($_COOKIE['PROFILER_SHOW'])&&($_COOKIE['PROFILER_SHOW']=='yes')) ? 'yes':'no'; 
 $profiler_dumpvars=(isset($_COOKIE['PROFILER_DUMPVARS'])&&($_COOKIE['PROFILER_DUMPVARS']=='yes')) ? 'yes':'no'; 
 
+}
 
-
-// params 
+// process query string from links 
 
 $lnum=0; 
 
-// during testing ... PURGE all logs 
-if (isset($_GET['PURGE'])) { 
+/* PURGE 
+ * removes all log files from system 
+ */
 
+if (isset($_GET['PURGE'])) { 
 	foreach(glob("/tmp/prtest_log_*.html") as $filename ) { 
-	if(unlink($filename)){ 
-	print "$filename has been deleted<br> "; 
-	}else{
-	print "***WARNING *** $filename could not be deleted<br> "; 
-	}
+		if(unlink($filename)){ 
+			print "$filename has been deleted<br> "; 
+		}else{
+			print "***WARNING *** $filename could not be deleted<br> "; 
+		}
 	} 
 }
 
-$stats = array(); 
-$times = array(); 
+/* ANALYZE 
+ * perform some simple analysis on the file to get info 
+ * such as count of --types, count of functions per second etc 
+ */
 
 if (isset($_GET['ANALYZE'])) { 
+	$stats = array(); 
+	$times = array(); 
 	// initially prepared for MERGED files ... ie if PID=0000...
 	// ASSUME that PID exists !
 	$lnum=0; 
@@ -159,9 +166,17 @@ if (isset($_GET['ANALYZE'])) {
 
 }
 
+
+/* MERGE 
+ * take all log files - and merge into a single log file 
+ * sorted by time. in some cases a DRUPAL page will rely upon 
+ * multiple calls via ajax/iframes/xWeb etc and will stripe 
+ * stats to mutiple log file. Merge allows data to be realt with 
+ * in a single file with pseudo pid 00000
+ */
+
 if (isset($_GET['MERGE'])) { 
 // careful here - spawning to linux shell !
-
 $O=`
 # RE-CREATE the merged file 
 cat /tmp/prtest_log_*.html | sort > /tmp/prmerged_log.html
@@ -169,74 +184,28 @@ cat /tmp/prtest_log_*.html | sort > /tmp/prmerged_log.html
 rm  /tmp/prtest_log_*.html
 mv  /tmp/prmerged_log.html /tmp/prtest_log_00000.html
 `; 
-
 print $O;
-
-
 }
 
-
-// set user request params 
-
-if (isset($_GET['LIMIT'])) { 
-	$line_limit=$_GET['LIMIT'];
-} else { 
-	$line_limit=99999; 
-}
-
-$start_line = isset($_GET['START']) ? $_GET['START'] : 1 ; 
-
-if (isset($_GET['PID'])) { 
-
-//TODO:
-// should DEFAULT to "-" or somehting that will get every line !
-	
-	if(isset($_GET['GREP'])) { 
-		// expecting trace,stack,chain etc...
-		// extract specific line 
-		$pattern=$_GET['GREP'];
-		$in = fopen("/tmp/prtest_log_" . $_GET['PID'] . ".html" , 'rb'); 
-
-		$lines_read=1;
-
-		while(($line = fgets($in)) && ($lnum < $line_limit)) {
-			if ($start_line < $lines_read ) {
-				if (strstr($line, $pattern)) { 
-					echo "$lnum - $lines_read " ; 
-    	     		echo($line);
-					$lnum++; 
-				}
-			}
-			$lines_read++;
-		}	
-
-    }elseif(isset($_GET['LIMIT'])) { 
-
-    	echo file_get_contents("/tmp/prtest_log_" . $_GET['PID'] . ".html",false,NULL,0,$line_limit * 100  );	
-
-	}else{
-		// dump the whole file 
-    	echo file_get_contents( "/tmp/prtest_log_" . $_GET['PID'] . ".html" );	
-	}
- 
-
-	if($lnum>$line_limit){ 
-		return; 
-	}
-} 
 
 //list all files
 
-
+print "<hr>";
+print ' [ <a href="prf_showtmplog.php?LIST">' . "List all logs</a> ] "; 
+print ' [ <a href="prf_showtmplog.php?MERGE">' . "Merge all logs</a> ] "; 
+print ' [ <a href="prf_showtmplog.php?PURGE">' . "Purge all logs</a> ] "; 
 print "<hr>log file:<br>";
 $nums=array();
 foreach(glob("/tmp/prtest_log_*.html") as $filename ) { 
 	preg_match("/[0-9]+/",$filename,$nums);
-	print '<a href="prf_showtmplog.php?PID='.$nums[0].'">' . "$filename $nums[0] DUMP ALL</a> "; 
-	print '<a href="prf_showtmplog.php?LIMIT=100&PID='.$nums[0].'">HEAD</a> '; 
-	print '<a href="prf_showtmplog.php?GREP=--chain&PID='.$nums[0].'">CHAIN</a> '; 
+	print '>' . "$filename $nums[0]  > "; 
+	print '<a href="prf_showtmplog.php?LIMIT=1000&PID='.$nums[0].'">HEAD</a> '; 
+	print '<a href="prf_showtmplog.php?LIMIT=1000&GREP=--chain&PID='.$nums[0].'">CHAIN</a> '; 
+	print '<a href="prf_showtmplog.php?LIMIT=1000&GREP=--trace&PID='.$nums[0].'">TRACE</a> '; 
+	print '<a href="prf_showtmplog.php?LIMIT=1000&GREP=--stack&PID='.$nums[0].'">STACK</a> '; 
+	print '<a href="prf_showtmplog.php?LIMIT=1000&GREP=--soap&PID='.$nums[0].'">SOAP</a> '; 
 	print '<a href="prf_showtmplog.php?ANALYZE&PID='.$nums[0].'">ANALYZE</a> '; 
-	print "\n<br>";
+	print "<br>";
 } 
 print "<hr>"; 
 $O=`
@@ -249,9 +218,6 @@ ls -ltr /tmp/prtest*.html
 `;
 print $O;
 
-print '<hr>* <a href="prf_showtmplog.php?LIST">' . "List all logs</a>"; 
-print '<br>* <a href="prf_showtmplog.php?MERGE">' . "Merge all logs</a>"; 
-print '<br>* <a href="prf_showtmplog.php?PURGE">' . "Purge all logs</a>"; 
 
 
 unset($d1);
@@ -282,6 +248,47 @@ function print_js_deserializer($s,$k) {
 	print  $s ;
 	print "') > $k ::==>> $s</a> - " ;
 }
+
+
+print "</div>"; // end of menu 
+
+
+
+
+
+/* PID => a file to process 
+ * the PID indicates which file we will process. If there is no pid, 
+ * as in the case of the MERGE, or the PURGE, then a file will not be 
+ * displayed 
+ */
+
+if (isset($_GET['PID'])) { 
+
+	$start_line = isset($_GET['START']) ? $_GET['START'] : 1 ; 
+	$line_limit = isset($_GET['LIMIT']) ? $_GET['LIMIT'] : 99999; 
+	$pattern = isset($_GET['GREP']) ? $_GET['GREP'] : 'pid'; 
+
+	// expecting trace,stack,chain etc...
+	// extract specific line 
+	$in = fopen("/tmp/prtest_log_" . $_GET['PID'] . ".html" , 'rb'); 
+
+	$lines_read=0;
+	$lnum=1;
+	print "<pre>"; 
+	while(($line = fgets($in)) && ($lnum <= $line_limit)) {
+		if ($start_line <= $lines_read ) {
+			if (strstr($line, $pattern)) { 
+				echo "$lnum - $lines_read - " ; 
+   	     		echo($line);
+				$lnum++; 
+			}
+		}
+		$lines_read++;
+	}	
+	print "</pre>"; 
+
+} 
+
 
 ?>
 

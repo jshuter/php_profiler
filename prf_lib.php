@@ -6,43 +6,41 @@ VERSION		DATE 		REASON
 0.001		20140312	Initial setup 
 0.002		20140315	record overhead 
 						ignore variable_get(); 
-TODO 
 
--- error trapping 
 -- convert into object 
 
 */
 
-
-date_default_timezone_set('UTC');
+// required for date functions 
+date_default_timezone_set('EST');
 
 // TEST NEW PROFILER
 
 $profile = array(); // main array to collect data for each function 
+
 $last_time = microtime(true); // starting time 
+
 $count = 0;
 $threshold_trace=0;  // limit what is printed into trace (see exception below) 
 $threshold_profile=0.01; //0.01;
 $output_line_limit=9999; // to limit log gi
+$output_line_count=0; 
+
 $trace = 1 ; // require 0/1
 $mydebug = 1 ;
-$last_function = 'none';
-$last_stack_size=0;
 $dumpvars_line_limit=999; // to limit log gi
 $dumpvars_line_count=0; 
 $dumpvars=isset($_COOKIE['PROFILER_DUMPVARS']) && ($_COOKIE['PROFILER_DUMPVARS'] == 'yes')?1:0;  
-
-//?
-if (!isset($profiler_start_time)){ 
-	$profiler_start_time=time(); 
-} 
+$profiler_start_time=time(); // time that this file loaded 
 
 // leaves out of $profile ... but still prints all chains.
 $partial=0; 
 $partial_pattern='_xweb_request'; 
 
-$output_line_count=0; 
+
 $last_trace_chain = ""; 
+$last_stack_size=0;
+$last_function = 'none';
 
 $profile['none'] = array();
 $profile['none']['name'] = 'none';
@@ -447,11 +445,11 @@ function show_profile() {
 $pid=getmypid(); 
 
 echo "<hr> SHOW THE LOG <br> 
-<a href=\"/prf_showtmplog.php?PID=$pid\" target=\"logfile\">Show Log - ALL</a> |  
-<a href=\"/prf_showtmplog.php?GREP=chain&PID=$pid\" target=\"chainlog\">Show Log -- chain</a> | 
-<a href=\"/prf_showtmplog.php?GREP=trace&PID=$pid\" target=\"tracelog\">Show Log -- trace</a> | 
-<a href=\"/prf_showtmplog.php?GREP=stack&PID=$pid\" target=\"stacklog\">Show Log -- stack</a> |
-<a href=\"/prf_showtmplog.php?PURGE=all\" target=\"stacklog\">Purge all</a>"; 
+<a href=\"/php_profiler/prf_showtmplog.php?PID=$pid\" target=\"logfile\">Show Log - ALL</a> |  
+<a href=\"/php_profiler/prf_showtmplog.php?GREP=chain&PID=$pid\" target=\"chainlog\">Show Log -- chain</a> | 
+<a href=\"/php_profiler/prf_showtmplog.php?GREP=trace&PID=$pid\" target=\"tracelog\">Show Log -- trace</a> | 
+<a href=\"/php_profiler/prf_showtmplog.php?GREP=stack&PID=$pid\" target=\"stacklog\">Show Log -- stack</a> |
+<a href=\"/php_profiler/prf_showtmplog.php?PURGE=all\" target=\"stacklog\">Purge all</a>"; 
 
 print "<table border=1>" ;
 
