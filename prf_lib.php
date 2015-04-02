@@ -197,13 +197,10 @@ function do_profile() {
 		if ($trace_chain != $last_trace_chain) { 
 			
 			//$lot  = gmdate("H:i:s", time()) ;
-			#list($usec, $sec) = explode(" ", microtime());
-			#preg_match('/0(\.\d\d\d\d)/', $usec, $output);
-			#$timestamp=gmdate("H:i:s", $sec).$output[1];
-			#$lot = $timestamp ; 
-
-			$lot = gmdate("H:i:s", time());
-
+			list($usec, $sec) = explode(" ", microtime());
+			preg_match('/0(\.\d\d\d\d)/', $usec, $output);
+			$timestamp=gmdate("H:i:s", $sec).$output[1];
+			$lot = $timestamp ; 
 			$lot .= " --pid:$pid --chain:"  ;
 			file_put_contents($log_file, $lot, FILE_APPEND );
 			file_put_contents($log_file, " - ", FILE_APPEND );

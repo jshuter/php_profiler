@@ -31,8 +31,16 @@ init_params() ;
 
 ?>
 
-<html><body><a href="prf_showtmplog.php">myscouts profiler version 0.1</a><hr>
-settings: <form action= "prf_showtmplog.php" method='POST'>
+<html><body>
+<style>
+div.infooff { display: none }
+div.helpoff { display: none }
+div.infoon { display: block }
+div.helpon { display: block }
+</style>
+
+<a href="prf_showtmplog.php">myscouts profiler version 0.1</a><hr>
+<form action= "prf_showtmplog.php" method='POST'>
 Turn Profiler On?
 <select name="profiler_on">
 <option<?php selection('profiler_on',"$profiler_on",'yes') ?>>yes</option>
@@ -48,9 +56,24 @@ Save Variables?
 <option<?php selection('profiler_dumpvars',"$profiler_dumpvars",'yes') ?>>yes</option>
 <option<?php selection('profiler_dumpvars',"$profiler_dumpvars",'no') ?>>no</option>
 </select>
-<input type='submit'>
+<input type='submit' value='Update Settings'>
 </form>
-<div>
+
+<script>
+function showhelp() { 
+document.getElementById("help").className = "helpon";;
+} 
+function showinfo() { 
+document.getElementById("info").className = "infoon";;
+} 
+</script>
+
+<div onclick=showhelp()>show/hide help</div> 
+<div onclick=showinfo()>show/hide info</div> 
+
+<div id=help class=helpoff>
+</div>
+<div id=info class=infooff>
 <pre>
 <?php
 function init_params() { 
@@ -268,6 +291,18 @@ if (isset($_GET['PID'])) {
 	$line_limit = isset($_GET['LIMIT']) ? $_GET['LIMIT'] : 99999; 
 	$pattern = isset($_GET['GREP']) ? $_GET['GREP'] : 'pid'; 
 
+	$prior_line = $start_line - $line_limit ; 
+	$next_line = $start_line + $line_limit ; 
+
+	print "<hr>";
+	print "<form action='prf_showtmplog.php' method='get'>";
+	print " START LINE <input name=START value=$start_line> 
+			LINES TO DISPLAY <input name=LIMIT value=$line_limit> 
+			LOG FILE PID <input name=PID value=".$_GET['PID'].">
+			PATTERN <input name=GREP value='$pattern'> 
+			<input type=submit value='Adjust Display'>";
+
+
 	// expecting trace,stack,chain etc...
 	// extract specific line 
 	$in = fopen("/tmp/prtest_log_" . $_GET['PID'] . ".html" , 'rb'); 
@@ -275,9 +310,15 @@ if (isset($_GET['PID'])) {
 	$lines_read=0;
 	$lnum=1;
 	print "<pre>"; 
+	$printed=false;
 	while(($line = fgets($in)) && ($lnum <= $line_limit)) {
 		if ($start_line <= $lines_read ) {
 			if (strstr($line, $pattern)) { 
+				if (!$printed){
+					$printed=true;
+					$prior_line=$lines_read;
+	print "<a href='prf_showtmplog.php?PID=".$_GET['PID']."&GREP=$pattern&START=$prior_line&LIMIT=$line_limit'><< PRIOR $line_limit lines <<</A> | "; 
+				}
 				echo "$lnum - $lines_read - " ; 
    	     		echo($line);
 				$lnum++; 
@@ -285,6 +326,10 @@ if (isset($_GET['PID'])) {
 		}
 		$lines_read++;
 	}	
+
+	print "<a href='prf_showtmplog.php?PID=".$_GET['PID']."&GREP=$pattern&START=$prior_line&LIMIT=$line_limit'><< PRIOR $line_limit lines <<</A> | "; 
+	print "<a href='prf_showtmplog.php?PID=".$_GET['PID']."&GREP=$pattern&START=$lines_read&LIMIT=$line_limit'>>> NEXT $line_limit lines R>></A>"; 
+
 	print "</pre>"; 
 
 } 
