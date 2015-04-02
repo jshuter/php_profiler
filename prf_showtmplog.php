@@ -21,7 +21,7 @@ TODO : order by date for easier merges
 # needed for display of data captured in logs ...
 # remove ???
 
-require '../kint/Kint.class.php';
+#require '../kint/Kint.class.php';
 
 $profiler_on = ''; 
 $profiler_show = ''; 
@@ -33,10 +33,23 @@ init_params() ;
 
 <html><body>
 <style>
-div.infooff { display: none }
-div.helpoff { display: none }
-div.infoon { display: block }
-div.helpon { display: block }
+div.infooff { display: none;  border-style: solid; border-width: 1px;} 
+div.helpoff { display: none;  border-style: solid; border-width: 1px;} 
+div.infoon { display: block;  border-style: solid; border-width: 1px;} 
+div.helpon { display: block;  border-style: solid; border-width: 1px;} 
+
+.button-simple {
+  font-family: inherit;
+  font-size: 100%;
+  padding: .5em 1em;
+  color: #444;
+  color: rgba(0,0,0,.8);
+  border: 1px solid #999;
+  border: 0 rgba(0,0,0,0);
+  background-color: #E6E6E6;
+  text-decoration: none;
+  border-radius: 2px;
+}
 </style>
 
 <a href="prf_showtmplog.php">myscouts profiler version 0.1</a><hr>
@@ -68,11 +81,12 @@ document.getElementById("info").className = "infoon";;
 } 
 </script>
 
-<div onclick=showhelp()>show/hide help</div> 
-<div onclick=showinfo()>show/hide info</div> 
+<span class=button-simple onclick=showhelp()>show/hide help</span> 
+<span class=button-simple onclick=showinfo()>show/hide info</span> 
 
 <div id=help class=helpoff>
 </div>
+
 <div id=info class=infooff>
 <pre>
 <?php

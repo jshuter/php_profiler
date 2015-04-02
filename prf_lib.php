@@ -100,6 +100,8 @@ function profiler_log($key, $text) {
 
 function do_profile() {
 
+		declare(ticks=0);
+
 		// This function is triggered by all function calls.
 		// Stack trace of 0 is 'this', 1 is the function that has just been popped off the stack ...
 
@@ -116,6 +118,7 @@ function do_profile() {
 
 		$bt = debug_backtrace();
 		if (count($bt) < 1) {
+				declare(ticks=1);
 				return ;
 		}
 
@@ -139,16 +142,19 @@ function do_profile() {
 
 		// check if $function is set ...
 		if($function == 'do_profile'){
+			declare(ticks=1);
 			return ;
 		}
 		// check if $function is set ...
 		if($function == 'variable_get'){
+			declare(ticks=1);
 			return ;
 		}
 		// lets also make a quick exit if we are in the show_profile() function 
 		if($function == 'show_profile'){
 		 	// no need to fix $last_time, etc if show_profile() is the last thing that is running 
 			// but ... could use some adjustment if this is not the case 	
+			declare(ticks=1);
 			return ;
 		}
 		
@@ -231,6 +237,7 @@ function do_profile() {
 			//TODO 
 			//EXPERIMENTAL - MAY NEED TO REMOVED 
 
+			declare(ticks=1);
 			return ; 
 
 		} 
@@ -267,6 +274,7 @@ function do_profile() {
 			$last_stack_size = $stack_size; 
 			$last_function = '_IGNORED_' ;
 
+			declare(ticks=1);
 			return ; 
 		} 
 
