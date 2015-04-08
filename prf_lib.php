@@ -1,4 +1,5 @@
 <?php
+namespace TSI\profiler;
 
 /* 
 VERSION		DATE 		REASON 
@@ -16,13 +17,12 @@ date_default_timezone_set('EST');
 
 // TEST NEW PROFILER
 
-$profile = array(); // main array to collect data for each function 
 
 $last_time = microtime(true); // starting time 
 
 $count = 0;
 $threshold_trace=0;  // limit what is printed into trace (see exception below) 
-$threshold_profile=0.01; //0.01;
+$threshold_profile=0; //0.01;
 $output_line_limit=9999; // to limit log gi
 $output_line_count=0; 
 
@@ -38,18 +38,31 @@ $partial=0;
 $partial_pattern='_xweb_request'; 
 
 
-$last_trace_chain = ""; 
-$last_stack_size=0;
-$last_function = 'none';
+$pid=getmypid(); 
+$log_file = "/tmp/prtest_log_" . $pid . ".html"; // duplicated - should move to global ? 
 
-$profile['none'] = array();
-$profile['none']['name'] = 'none';
-$profile['none']['time'] = 0;
-$profile['none']['wait'] = 0;
-$profile['none']['count'] = 1;
-$profile['none']['starts'] = 1; // updated below 
-$profile['none']['firstcount'] = 1;
+// the following get reset if sub-reports are to be printed 
+$profile = array(); // main array to collect data for each function 
 
+
+function profiler_init (){ 
+
+	global $last_trace_chain,$last_stack_size,$last_function,$profile;
+	$last_trace_chain = ""; 
+	$last_stack_size=0;
+	$last_function = 'none';
+
+	$profile = array(); 
+
+	$profile['none'] = array();
+	$profile['none']['name'] = 'none';
+	$profile['none']['time'] = 0;
+	$profile['none']['wait'] = 0;
+	$profile['none']['count'] = 1;
+	$profile['none']['starts'] = 1; // updated below 
+	$profile['none']['firstcount'] = 1;
+
+}
 
 /* profiler_log() 
  * 
@@ -63,18 +76,15 @@ $profile['none']['firstcount'] = 1;
 
 function profiler_log($key, $text) { 
 
-	$pid=getmypid(); 
-	$log_file = "/tmp/prtest_log_" . $pid . ".html"; // duplicated - should move to global ? 
+	global $pid;
+	global $log_file; 
 
 	//$lot  = gmdate("H:i:s:u", microtime(true)) ;
 	list($usec, $sec) = explode(" ", microtime());
 	preg_match('/0(\.\d\d\d\d)/', $usec, $output);
 	$timestamp=gmdate("H:i:s", $sec).$output[1];
-	$lot  = $timestamp;  
-	$lot .= " --pid:$pid --$key:"  ;
-	file_put_contents($log_file, $lot, FILE_APPEND );
-	$lot = " - " ;
-	file_put_contents($log_file, $text, FILE_APPEND );
+	$lot  = $timestamp . " --pid:$pid --$key:"  ;
+	file_put_contents($log_file, $lot . " - " . $text . "\n", FILE_APPEND );
 
 } 
 
@@ -100,6 +110,13 @@ function profiler_log($key, $text) {
 
 function do_profile() {
 
+// modes 0 > default 1 => noop 
+
+$noop = false ; 
+
+	if ($noop == true) { 
+		return ; 
+	} 
 		// This function is triggered by all function calls.
 		// Stack trace of 0 is 'this', 1 is the function that has just been popped off the stack ...
 
@@ -110,7 +127,10 @@ function do_profile() {
 			   $threshold_trace, $output_line_limit, $last_function,$dumpvars_line_count,
 			   $last_stack_size, $partial, $partial_pattern, $mydebug, $last_trace_chain, $trace ;
 
-		
+		if ($count == 0) { 
+			profiler_init(); 
+		}
+
 		//-------------------------------------------------------------------------
 		// save the backtrace stack for analysis ... 
 
@@ -129,16 +149,18 @@ function do_profile() {
 			// we assume that [0] contains THIS do_profile ... 
 			$frame = $bt[$stack_pos];
 			$function = $frame['function'];
+//debug - dump all 
+			profiler_log('ALL',$function);
 			$stack_pos++;
 			if($stack_pos>=$stack_size){
 				break;
 			} 
-		}while($function == 'do_profile' || $function == 'variable_get');
+		}while((strpos($function,'do_profile')>0) || $function == 'variable_get');
 			
 		// added special IGNORE of variable_get() because it gets times that it should not ??
 
 		// check if $function is set ...
-		if($function == 'do_profile'){
+		if(strpos($function,'do_profile')>0){
 			return ;
 		}
 		// check if $function is set ...
@@ -146,16 +168,11 @@ function do_profile() {
 			return ;
 		}
 		// lets also make a quick exit if we are in the show_profile() function 
-		if($function == 'show_profile'){
+		if($function == 'xshow_profileX'){
 		 	// no need to fix $last_time, etc if show_profile() is the last thing that is running 
 			// but ... could use some adjustment if this is not the case 	
 			return ;
 		}
-		
-		//-------------------------------------------------------------------------
-		// get log file name  
-		$pid = getmypid();
-		$log_file = "/tmp/prtest_log_" . $pid . ".html";
 		
 		//-------------------------------------------------------------------------
 		// setting time must be placed properly 
@@ -181,7 +198,9 @@ function do_profile() {
 		foreach($bt as $k => $slice) { 
 			$x++; 
 			// trace all - even if partial - but drop THIS do_profile from the end of the chain 
-			if($x!=1 || $slice['function'] != 'do_profile') {  
+			if( strpos($slice['function'],'do_profile')<1) {  
+//TODO review $x condition . below ?
+			//if($x!=1 || $slice['function'] != 'do_profile') {  
 				$trace_chain = $slice['function'] . "->" . $trace_chain ; 
 				if($partial > 0) { 
 					if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
@@ -196,33 +215,17 @@ function do_profile() {
 	
 		if ($trace_chain != $last_trace_chain) { 
 			
-			//$lot  = gmdate("H:i:s", time()) ;
-			list($usec, $sec) = explode(" ", microtime());
-			preg_match('/0(\.\d\d\d\d)/', $usec, $output);
-			$timestamp=gmdate("H:i:s", $sec).$output[1];
-			$lot = $timestamp ; 
-			$lot .= " --pid:$pid --chain:"  ;
-			file_put_contents($log_file, $lot, FILE_APPEND );
-			file_put_contents($log_file, " - ", FILE_APPEND );
-			$lot = $trace_chain . "\n";
-			file_put_contents($log_file, $lot, FILE_APPEND );
+			profiler_log('chain',$trace_chain) ; 
 			$last_trace_chain = $trace_chain ; 
-
 
 			//DUMPVARS 
 			// and the vars ? -- only when the calling function changes ...
 			if ($dumpvars > 0) { 
 				if ($dumpvars_line_count < $dumpvars_line_limit) { 
 					$dumpvars_line_count++; 
-					list($usec, $sec) = explode(" ", microtime());
-					preg_match('/0(\.\d\d\d\d)/', $usec, $output);
-					$timestamp=gmdate("H:i:s", $sec).$output[1];
-					$lot = $timestamp ; 
-					$lot .= " --pid:$pid --vars:"  ;
-					file_put_contents($log_file, $lot, FILE_APPEND );
-					file_put_contents($log_file, " - ", FILE_APPEND );
+
 					$lot=serialize(get_defined_vars()) ; 
-					file_put_contents($log_file, $lot, FILE_APPEND );
+					profiler_log('vars',$lot);
 
 				}
 			} 
@@ -355,14 +358,23 @@ function do_profile() {
 
 
 				if( $output_line_count < $output_line_limit ) { 
-list($usec, $sec) = explode(" ", microtime());
-preg_match('/0(\.\d\d\d\d)/', $usec, $output);
-$timestamp=gmdate("H:i:s", $sec).$output[1];
-					$lot  = $timestamp ; 
-					$lot .= " --pid:$pid --stack:"  ;
-					$lot .= " fn:$function - count:$count - stack_pos:$index - file:" ;
-					$lot .= $caller['file'] . " - line:" . $caller['line'] . " - function:" . $caller['function'] . " --\n" ;
-					file_put_contents($log_file, $lot, FILE_APPEND );
+
+/* debug 
+if (!(isset($caller['file']))) { 
+print_r(get_defined_vars()) ; 
+exit ; 
+}
+*/
+					// caller can be function or object 
+					// TODO - check for 'class' if file is missing -- better handle Classes !
+
+					$lot = " fn:$function - count:$count - stack_pos:$index - file:" ;
+					$lot .= (isset($caller['file'])) ? $caller['file'] : 'FILE DNE' ;
+					$lot .= " - line:" ;
+					$lot .= (isset($caller['line'])) ? $caller['line'] : 'LINE DNE' ;
+					$lot .= " - function:" . $caller['function'] . " --" ;
+					profiler_log('stack',$lot);
+
 					$output_line_count++; 			
 				}
 		}
@@ -385,16 +397,13 @@ $timestamp=gmdate("H:i:s", $sec).$output[1];
 
 						if(($wait_time >= $threshold_trace) || ($threshold_trace_override>0)) {
 								// check that function changes ?
-list($usec, $sec) = explode(" ", microtime());
-preg_match('/0(\.\d\d\d\d)/', $usec, $output);
-$timestamp=gmdate("H:i:s", $sec).$output[1];
-								$lot  = $timestamp;  
-								$lot .= " --pid:$pid --trace:"  ;
-								$lot = $lot . " count: $count ";
+								$lot = " count: $count ";
 								$lot = $lot . " - wait_time: " . number_format($wait_time,4);
 							//	$lot = $lot . " - last_time: " . gmdate("H:i:s",$last_time);
-								$lot = $lot . " - line: " . $frame['line'] ;
-								$lot = $lot . " - file: " . $frame['file'] ;
+								$lot .= (isset($caller['line'])) ? $caller['line'] : 'FILE DNE' ;
+								//$lot = $lot . " - line: " . $frame['line'] ;
+								$lot .= (isset($caller['file'])) ? $caller['file'] : 'FILE DNE' ;
+								//$lot = $lot . " - file: " . $frame['file'] ;
 								$lot = $lot . " - function: $function ";
 								$lot = $lot . " - prior_function: $last_function ";
 								$lot = $lot . " - stack_size: $stack_size ";
@@ -402,8 +411,9 @@ $timestamp=gmdate("H:i:s", $sec).$output[1];
 								$lot = $lot . " - time: " . number_format($profile[$caller['function']]['time'],4) ;
 								$lot = $lot . " - wait: " . number_format($profile[$caller['function']]['wait'],4) ;
 								$lot = $lot . " - starts: " . $profile[$caller['function']]['starts'] ;
-								$lot = $lot . "--\n";
-								file_put_contents($log_file, $lot, FILE_APPEND );
+								$lot = $lot . "--";
+
+								profiler_log('trace',$lot);
 						}
 						$output_line_count++; 
 				}
@@ -416,7 +426,7 @@ $timestamp=gmdate("H:i:s", $sec).$output[1];
 		$last_stack_size = $stack_size ;
 
 		// record overhead 
-		$profile['do_profile']['time'] += (microtime(true) - $overhead_start);  
+		$profile['TSI\profiler\do_profile']['time'] += (microtime(true) - $overhead_start);  
 
 		//unset($bt);
 
@@ -429,17 +439,17 @@ function show_profile() {
 
 		// print out report of aggregated stack info and timming
 
-		global $profile,$count,$threshold_profile,$profiler_start_time;
+		global $profile,$count,$threshold_profile,$profiler_start_time,$pid;
 
 		$fcount=0;
 		$prcount=0;
+
+		profiler_log('log','Report Started'); 
 
 		echo html_styles(); 
 		echo "<hr><div class='profiler'>";
 		echo '<h2>Slow Function Report</h2>';
 
-
-$pid=getmypid(); 
 
 echo "<hr> SHOW THE LOG <br> 
 <a href=\"/php_profiler/prf_showtmplog.php?PID=$pid\" target=\"logfile\">Show Log - ALL</a> |  
@@ -447,6 +457,7 @@ echo "<hr> SHOW THE LOG <br>
 <a href=\"/php_profiler/prf_showtmplog.php?GREP=trace&PID=$pid\" target=\"tracelog\">Show Log -- trace</a> | 
 <a href=\"/php_profiler/prf_showtmplog.php?GREP=stack&PID=$pid\" target=\"stacklog\">Show Log -- stack</a> |
 <a href=\"/php_profiler/prf_showtmplog.php?PURGE=all\" target=\"stacklog\">Purge all</a>"; 
+
 
 print "<table border=1>" ;
 
@@ -481,12 +492,17 @@ print "<table border=1>" ;
 					echo "<td>$v";
 				} 
 			}
+
+			if (!isset($f['count'])) { 
+				print_r($f);
+			}else {
 			// avg exec time
 			$a = $f['time'] / ($f['count']) ;
 			echo "<td>" . number_format($a,4);
 			// avg wait time
 			$a = $f['wait'] / ($f['count']) ;
 			echo "<td>" .  number_format($a,4);
+			}
 		}
 	}	
 echo "</table>";
@@ -501,7 +517,9 @@ echo "<br>Elapsed time (s):" . number_format($profiler_end_time - $profiler_star
 unset($profiler_start_time) ; 
 echo '</div>';
 
+profiler_log('log','Report ended'); 
 }
+
 
 function html_styles() { 
 
