@@ -21,7 +21,7 @@ TODO : order by date for easier merges
 # needed for display of data captured in logs ...
 # remove ???
 
-require '../kint/Kint.class.php';
+#require '../kint/Kint.class.php';
 
 $profiler_on = ''; 
 $profiler_show = ''; 
@@ -33,13 +33,127 @@ init_params() ;
 
 <html><body>
 <style>
-div.infooff { display: none }
-div.helpoff { display: none }
-div.infoon { display: block }
-div.helpon { display: block }
+div.infooff { display: none;  border-style: solid; border-width: 1px;} 
+div.helpoff { display: none;  border-style: solid; border-width: 1px;} 
+div.infoon { display: block;  border-style: solid; border-width: 1px;} 
+div.helpon { display: block;  border-style: solid; border-width: 1px;} 
+
+.button-simple {
+  font-family: inherit;
+  font-size: 100%;
+  padding: .5em 1em;
+  color: #444;
+  color: rgba(0,0,0,.8);
+  border: 1px solid #999;
+  border: 0 rgba(0,0,0,0);
+  background-color: #E6E6E6;
+  text-decoration: none;
+  border-radius: 2px;
+}
+/* ============================================================
+  COMMON
+============================================================ */
+#wrapper {
+  min-width: 600px;
+}
+
+.settings {
+  display: table;
+  width: 100%;
+}
+.settings .row {
+  display: table-row;
+}
+.settings .question,
+.settings .switch {
+  display: table-cell;
+  vertical-align: middle;
+  padding: 10px;
+}
+.settings .question {
+  width: 600px;
+  font-family: "Roboto Slab", serif;
+  font-size: 20px;
+}
+
+/* ============================================================
+  COMMON
+============================================================ */
+.cmn-toggle {
+  position: absolute;
+  margin-left: -9999px;
+  visibility: hidden;
+}
+.cmn-toggle + label {
+  display: block;
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+/* ============================================================
+  SWITCH 1 - ROUND
+============================================================ */
+input.cmn-toggle-round + label {
+  padding: 2px;
+  width: 120px;
+  height: 60px;
+  background-color: #dddddd;
+  -webkit-border-radius: 60px;
+  -moz-border-radius: 60px;
+  -ms-border-radius: 60px;
+  -o-border-radius: 60px;
+  border-radius: 60px;
+}
+input.cmn-toggle-round + label:before, input.cmn-toggle-round + label:after {
+  display: block;
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  bottom: 1px;
+  content: "";
+}
+input.cmn-toggle-round + label:before {
+  right: 1px;
+  background-color: #f1f1f1;
+  -webkit-border-radius: 60px;
+  -moz-border-radius: 60px;
+  -ms-border-radius: 60px;
+  -o-border-radius: 60px;
+  border-radius: 60px;
+  -webkit-transition: background 0.4s;
+  -moz-transition: background 0.4s;
+  -o-transition: background 0.4s;
+  transition: background 0.4s;
+}
+input.cmn-toggle-round + label:after {
+  width: 58px;
+  background-color: #fff;
+  -webkit-border-radius: 100%;
+  -moz-border-radius: 100%;
+  -ms-border-radius: 100%;
+  -o-border-radius: 100%;
+  border-radius: 100%;
+  -webkit-box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  -moz-box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  -webkit-transition: margin 0.4s;
+  -moz-transition: margin 0.4s;
+  -o-transition: margin 0.4s;
+  transition: margin 0.4s;
+}
+input.cmn-toggle-round:checked + label:before {
+  background-color: #8ce196;
+}
+input.cmn-toggle-round:checked + label:after {
+  margin-left: 60px;
+}
 </style>
 
-<a href="prf_showtmplog.php">myscouts profiler version 0.1</a><hr>
+<a href="prf_showtmplog.php">reload myscouts profiler version 0.1</a><hr>
 <form action= "prf_showtmplog.php" method='POST'>
 Turn Profiler On?
 <select name="profiler_on">
@@ -68,11 +182,19 @@ document.getElementById("info").className = "infoon";;
 } 
 </script>
 
-<div onclick=showhelp()>show/hide help</div> 
-<div onclick=showinfo()>show/hide info</div> 
+<span class=button-simple onclick=showhelp()>show/hide help</span> 
+<span class=button-simple onclick=showinfo()>show/hide info</span> 
+
+<div class="question"> Do you like bananas?  </div>
+<div class="switch">
+<input id="cmn-toggle-1" class="cmn-toggle cmn-toggle-round" type="checkbox">
+<label for="cmn-toggle-1"></label>
+</div>
+
 
 <div id=help class=helpoff>
 </div>
+
 <div id=info class=infooff>
 <pre>
 <?php
@@ -217,9 +339,11 @@ print "<hr>";
 print ' [ <a href="prf_showtmplog.php?LIST">' . "List all logs</a> ] "; 
 print ' [ <a href="prf_showtmplog.php?MERGE">' . "Merge all logs</a> ] "; 
 print ' [ <a href="prf_showtmplog.php?PURGE">' . "Purge all logs</a> ] "; 
-print "<hr>log file:<br>";
+print "<hr>log files:<br>";
+
 $nums=array();
-foreach(glob("/tmp/prtest_log_*.html") as $filename ) { 
+//foreach(glob("/tmp/systemd-private-3d9ca8009739485fa357105225fc428e-httpd.service-ZvTRhS/tmp/prtest_log_*.html") as $filename ) { 
+foreach(scandir("/tmp/") as $filename ) { 
 	preg_match("/[0-9]+/",$filename,$nums);
 	print '>' . "$filename $nums[0]  > "; 
 	print '<a href="prf_showtmplog.php?LIMIT=1000&PID='.$nums[0].'">HEAD</a> '; 
@@ -230,14 +354,15 @@ foreach(glob("/tmp/prtest_log_*.html") as $filename ) {
 	print '<a href="prf_showtmplog.php?ANALYZE&PID='.$nums[0].'">ANALYZE</a> '; 
 	print "<br>";
 } 
+
 print "<hr>"; 
 $O=`
 df
 `;
 print $O;
-print "<hr>"; 
+print "<hr>?)"; 
 $O=`
-ls -ltr /tmp/prtest*.html
+ls -ltr /tmp/systemd-private-3d9ca8009739485fa357105225fc428e-httpd.service-ZvTRhS/tmp/prtest*.html
 `;
 print $O;
 

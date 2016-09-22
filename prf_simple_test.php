@@ -1,4 +1,3 @@
-
 <html>
 <head>
 </head>
@@ -79,7 +78,7 @@ div.profiler {
 
 require 'prf_lib.php'; 
 declare(ticks=1);
-register_tick_function('TSI\profiler\do_profile');
+register_tick_function('do_profile');
 
 
 #-------------------------------------------
@@ -87,26 +86,25 @@ register_tick_function('TSI\profiler\do_profile');
 #-------------------------------------------
 
 // microsecond delay 
-//$t=1000000; // 1 second
-$t=10000;
-
+$t=1000000;
 
 func_serial1() ;
-TSI\profiler\show_profile();
+show_profile();
 
 
-TSI\profiler\profiler_init(); 
+$profile = array();
 func_serial2() ;
-TSI\profiler\show_profile();
+show_profile();
 
 #-------------------------------------------
 # reset and start test 2 
 #-------------------------------------------
 
+$profile = array();
 
-TSI\profiler\profiler_init(); 
 func_one();
-TSI\profiler\show_profile(); 
+
+show_profile(); 
 
 
 
