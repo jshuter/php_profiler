@@ -23,20 +23,21 @@ $last_time = microtime(true); // starting time
 $count = 0;
 $threshold_trace=0;  // limit what is printed into trace (see exception below) 
 $threshold_profile=0.01; //0.01;
-$output_line_limit=9999; // to limit log gi
+$output_line_limit=999999; // to limit log gi
 $output_line_count=0; 
 
 $trace = 1 ; // require 0/1
 $mydebug = 1 ;
-$dumpvars_line_limit=999; // to limit log gi
+$dumpvars_line_limit=999999; // to limit log gi
 $dumpvars_line_count=0; 
 $dumpvars=isset($_COOKIE['PROFILER_DUMPVARS']) && ($_COOKIE['PROFILER_DUMPVARS'] == 'yes')?1:0;  
 $profiler_start_time=time(); // time that this file loaded 
 
 // leaves out of $profile ... but still prints all chains.
-$partial=0; 
-$partial_pattern='_xweb_request'; 
 
+// NOTE - if pattern is not null, then it will be used to display trace 
+$partial=0;
+$partial_pattern='netforum'; 
 
 $last_trace_chain = ""; 
 $last_stack_size=0;
@@ -71,6 +72,7 @@ function profiler_log($key, $text) {
 	preg_match('/0(\.\d\d\d\d)/', $usec, $output);
 	$timestamp=gmdate("H:i:s", $sec).$output[1];
 	$lot  = $timestamp;  
+	$lot .= " - " . $sec; 
 	$lot .= " --pid:$pid --$key:"  ;
 	file_put_contents($log_file, $lot, FILE_APPEND );
 	$lot = " - " ;
@@ -182,6 +184,7 @@ function do_profile() {
 
 		// build line log with call stack    fn1()->fn2()->fn3()->...
 		$trace_chain=""; 
+		$trace_chain_rtl=""; 
 		$x=0; 
 
 		foreach($bt as $k => $slice) { 
@@ -189,13 +192,22 @@ function do_profile() {
 			// trace all - even if partial - but drop THIS do_profile from the end of the chain 
 			if($x!=1 || $slice['function'] != 'do_profile') {  
 				$trace_chain = $slice['function'] . "->" . $trace_chain ; 
+				$trace_chain_rtl .= "<-" . $slice['function'] ; 
 				if($partial > 0) { 
-					if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
-						$found++; 
+					if ($partial_pattern != '') { 
+						if (preg_match("/$partial_pattern/",$slice['function']) >0 ) { 
+							$found++; 
+						} 
 					}	 
 				}
 			}
 		}
+
+		// if pattern exists and is found - it WILL be traced 
+		if ($found > 0) { 
+			 $threshold_trace_override = 1;
+		} 
+
 
 
 		// write chain log to file 
@@ -207,6 +219,7 @@ function do_profile() {
 			preg_match('/0(\.\d\d\d\d)/', $usec, $output);
 			$timestamp=gmdate("H:i:s", $sec).$output[1];
 			$lot = $timestamp ; 
+			$lot .= " - " . $sec; 
 			$lot .= " --pid:$pid --chain:"  ;
 			file_put_contents($log_file, $lot, FILE_APPEND );
 			file_put_contents($log_file, " - ", FILE_APPEND );
@@ -214,6 +227,20 @@ function do_profile() {
 			file_put_contents($log_file, $lot, FILE_APPEND );
 			$last_trace_chain = $trace_chain ; 
 
+			// things dont line up well with LTR... 
+			// redo for right-to-left version 
+			/* 
+			list($usec, $sec) = explode(" ", microtime());
+			preg_match('/0(\.\d\d\d\d)/', $usec, $output);
+			$timestamp=gmdate("H:i:s", $sec).$output[1];
+			$lot = $timestamp ; 
+			$lot .= " - " . $sec; 
+			$lot .= " --pid:$pid --rtlchain:"  ;
+			file_put_contents($log_file, $lot, FILE_APPEND );
+			file_put_contents($log_file, " - ", FILE_APPEND );
+			$lot = $trace_chain_rtl . "\n";
+			file_put_contents($log_file, $lot, FILE_APPEND );
+			*/
 
 			//DUMPVARS 
 			// and the vars ? -- only when the calling function changes ...
@@ -224,6 +251,7 @@ function do_profile() {
 					preg_match('/0(\.\d\d\d\d)/', $usec, $output);
 					$timestamp=gmdate("H:i:s", $sec).$output[1];
 					$lot = $timestamp ; 
+					$lot .= " - " . $sec; 
 					$lot .= " --pid:$pid --vars:"  ;
 					file_put_contents($log_file, $lot, FILE_APPEND );
 					file_put_contents($log_file, " - ", FILE_APPEND );
@@ -363,13 +391,19 @@ function do_profile() {
 
 
 				if( $output_line_count < $output_line_limit ) { 
-list($usec, $sec) = explode(" ", microtime());
-preg_match('/0(\.\d\d\d\d)/', $usec, $output);
-$timestamp=gmdate("H:i:s", $sec).$output[1];
+					list($usec, $sec) = explode(" ", microtime()); // ? why this ?
+					preg_match('/0(\.\d\d\d\d)/', $usec, $output);
+					$timestamp=gmdate("H:i:s", $sec).$output[1];
 					$lot  = $timestamp ; 
+					$lot .= " - " . $sec; 
 					$lot .= " --pid:$pid --stack:"  ;
 					$lot .= " fn:$function - count:$count - stack_pos:$index - file:" ;
-					$lot .= $caller['file'] . " - line:" . $caller['line'] . " - function:" . $caller['function'] . " --\n" ;
+					if(isset($caller['file'])) { 
+						$lot .= $caller['file'] . " - line:" . $caller['line'] . " - function:" . $caller['function'] . " --\n" ;
+					}else{ 
+						// handle callback / object etc 
+						$lot .= ' no file ' . " - line:" . 'no line' . " - function:" . $caller['function'] . " --\n" ;
+					}				 
 					file_put_contents($log_file, $lot, FILE_APPEND );
 					$output_line_count++; 			
 				}
@@ -397,12 +431,24 @@ list($usec, $sec) = explode(" ", microtime());
 preg_match('/0(\.\d\d\d\d)/', $usec, $output);
 $timestamp=gmdate("H:i:s", $sec).$output[1];
 								$lot  = $timestamp;  
+								$lot .= " - " . $sec; 
 								$lot .= " --pid:$pid --trace:"  ;
 								$lot = $lot . " count: $count ";
 								$lot = $lot . " - wait_time: " . number_format($wait_time,4);
 							//	$lot = $lot . " - last_time: " . gmdate("H:i:s",$last_time);
-								$lot = $lot . " - line: " . $frame['line'] ;
-								$lot = $lot . " - file: " . $frame['file'] ;
+
+								if (isset($frame['line'])) { 
+									$lot = $lot . " - line: " . $frame['line'] ;
+								}else { 
+									$lot = $lot . " - line: DNE" ;
+								}
+								if (isset($frame['file'])) { 
+									$lot = $lot . " - file: " . $frame['file'] ;
+								} else { 
+									$lot = $lot . " - file: DNE" ;
+								}
+
+
 								$lot = $lot . " - function: $function ";
 								$lot = $lot . " - prior_function: $last_function ";
 								$lot = $lot . " - stack_size: $stack_size ";
